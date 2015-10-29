@@ -359,14 +359,14 @@ sub get_memory_usage {
 # this function accepts the path to a file and then tests to see whether the 
 # item at that path is an Apache binary
 sub test_process {
-	my ($process_name) = @_;
-
-        # Reduce to only aphanumerics, to deal with "nginx: master process" or any newlnes
-        $process_name = `echo -n $process_name | sed 's/://g'`;
-
+	# check to see if there is a binary called "apachectl" in our path
+	my $process_name = `which apachectl`;
+	chomp($process_name);
+	
 	# the first line of output from "httpd -V" should tell us whether or
 	# not this is Apache
 	my @output = `$process_name -V 2>&1`;
+	
 
 	print "VERBOSE: First line of output from \"$process_name -V\": $output[0]" if $main::VERBOSE;
 
@@ -376,9 +376,14 @@ sub test_process {
         #}
 
 	# check for output matching Apache'
-        if ( $output[0] =~ m/^Server version.*Apache\/[0-9].*/ ) {
-		$return_val = 1;
-	} 
+	foreach ( @output ){
+        if ( $_ =~ m/^Server version.*Apache\/[0-9].*/){
+                $return_val = 1;
+        }
+        if ( $return_val eq 1 ){
+                last;
+        }
+	}
 
 	return $return_val;
 }
@@ -389,7 +394,7 @@ sub get_pid {
 
 	# find the pid for the software listening on the specified port. this
 	# might return multiple values depending on Apache's listen directives
-	my @pids = `netstat -ntap | grep LISTEN | grep \":$port \" | awk \'{ print \$7 }\' | cut -d / -f 1`;
+	my @pids = `netstat -ntap | grep -E 'LISTEN|ESCUCHAR|OUÇA' | grep \":$port \" | awk \'{ print \$7 }\' | cut -d / -f 1`;
 
 	print "VERBOSE: ".@pids." found listening on port 80\n" if $main::VERBOSE;
 
@@ -448,7 +453,8 @@ sub get_process_name {
 # this will return the apache root directory when given the full path to an
 # Apache binary
 sub get_apache_root {
-	my ( $process_name ) = @_;
+	my $process_name = `which apachectl`;
+	chomp($process_name);
 	# use the identified Apache binary to figure out where the root directory is 
 	# for the Apache instance
 	my $apache_root = `$process_name -V | grep \"HTTPD_ROOT\"`;
@@ -465,7 +471,8 @@ sub get_apache_root {
 # this will return the apache configuration file, relative to the apache root
 # for the provided apache binary
 sub get_apache_conf_file {
-	my ( $process_name ) = @_;
+	my $process_name = `which apachectl`;
+	chomp($process_name);
 	my $apache_conf_file = `$process_name -V | grep \"SERVER_CONFIG_FILE\"`;
 	$apache_conf_file =~ s/.*=\"(.*)\"/$1/;
 	chomp($apache_conf_file);
@@ -481,10 +488,10 @@ sub get_apache_conf_file {
 # this will determine whether this apache is using the worker or the prefork
 # model based on the way the binary was built
 sub get_apache_model {
-	my ( $process_name ) = @_;
-	my $model = `$process_name -l | egrep "worker.c|prefork.c"`;
+	my $process_name = `which apachectl`;
+	chomp($process_name);
+	my $model = `$process_name -V | grep \"Server MPM:\" | awk \'{print \$3}\'`;
 	chomp($model);
-	$model =~ s/\s*(.*)\.c/$1/;
 
 	# return the name of the MPM, or 0 if there is no result
 	if ( $model eq '' ) {
@@ -496,15 +503,15 @@ sub get_apache_model {
 
 # this will get the Apache version string
 sub get_apache_version {
-	my ( $process_name ) = @_;
+	my $process_name = `which apachectl`;
+	chomp($process_name);
 	my $version = `$process_name -V | grep "Server version"`;
 	chomp($version);
 	$version =~ s/.*:\s(.*)$/$1/;
-
+	
 	if ( $version eq '' ) {
 		$version = 0;
 	}
-
 	return $version
 }
 
@@ -950,10 +957,10 @@ else {
 	#}
 
 	# check to see if the process we have identified is Apache
-	my $is_it_apache = test_process($process_name);
+	my $is_it_apache = test_process();
 
 	if ( $is_it_apache == 1 ) {
-		my $apache_version = get_apache_version($process_name);
+		my $apache_version = get_apache_version();
 
 		print "VERBOSE: Apache version: $apache_version\n" if $VERBOSE;
 
